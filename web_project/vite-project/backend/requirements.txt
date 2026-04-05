@@ -1,5 +1,4 @@
 flask
 flask-socketio
 flask-cors
-gevent>=24.10.1
 gunicorn

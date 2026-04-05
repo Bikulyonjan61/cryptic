@@ -1,5 +1,3 @@
-from gevent import monkey
-monkey.patch_all()
 
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, join_room, emit
@@ -12,8 +10,7 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-in-producti
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "*")
 
 CORS(app, origins=FRONTEND_URL)
-socketio = SocketIO(app, cors_allowed_origins=FRONTEND_URL, async_mode="gevent")
-
+socketio = SocketIO(app, cors_allowed_origins=FRONTEND_URL, async_mode="threading")
 rooms = {}
 ROOM_TTL = 3600
 
