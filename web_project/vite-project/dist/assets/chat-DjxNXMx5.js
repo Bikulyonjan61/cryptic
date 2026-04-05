@@ -1,0 +1,7 @@
+import{s as l}from"./chat-Bx48hdJF.js";const n=document.getElementById("chat-area"),o=document.getElementById("msg-input"),m=document.getElementById("send-btn"),p=document.getElementById("btm-leave"),r=sessionStorage.getItem("room_code");r||(window.location.href="/");async function c(){const e=o.value.trim();if(e){o.value="",o.focus();try{await l(r,e),u("You",e,Date.now()/1e3,!0)}catch(t){g("⚠️ Failed to send message."),console.error(t)}}}m.addEventListener("click",c);o.addEventListener("keydown",e=>{e.key==="Enter"&&!e.shiftKey&&c()});p.addEventListener("click",()=>{sessionStorage.removeItem("room_code"),window.location.href="/"});function u(e,t,d,f){document.querySelector("#chat-area .text-gray-400")?.remove();const i=x(d),s=document.createElement("div");s.className="flex flex-col items-end",s.innerHTML=`
+    <span class="text-xs text-gray-400 mb-1 px-1">${a(e)} · ${i}</span>
+    <div class="max-w-xs px-4 py-2 rounded-2xl text-sm break-words
+      bg-purple-600 text-white rounded-br-sm">
+      ${a(t)}
+    </div>
+  `,n.appendChild(s),n.scrollTop=n.scrollHeight}function g(e){const t=document.createElement("div");t.className="text-center text-gray-400 text-xs py-1",t.textContent=e,n.appendChild(t),n.scrollTop=n.scrollHeight}function x(e){return new Date(e*1e3).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}function a(e){return e.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}

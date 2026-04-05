@@ -18,14 +18,15 @@ if (!roomCode) {
 // ── Connect to room ───────────────────────────────────────────────────
 // joinRoom derives the AES key, opens the WebSocket, and waits for the
 // server to confirm membership before the chat UI becomes usable.
-try {
-  await joinRoom(roomCode);
-  appendSystemMessage(`✅ Joined room ${roomCode} as ${getAnonName()}`);
-} catch (err) {
-  appendSystemMessage(`❌ Could not join room: ${err.message}`);
-  console.error(err);
-  // Give the user a moment to read the error, then redirect home
-  setTimeout(() => { window.location.href = "/"; }, 3000);
+async function init() {
+  try {
+    await joinRoom(roomCode);
+    appendSystemMessage(`✅ Joined room ${roomCode} as ${getAnonName()}`);
+  } catch (err) {
+    appendSystemMessage(`❌ Could not join room: ${err.message}`);
+    console.error(err);
+    setTimeout(() => { window.location.href = "/"; }, 3000);
+  }
 }
 
 // ── Real-time event handlers ──────────────────────────────────────────

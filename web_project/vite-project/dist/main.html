@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cryptic Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module" crossorigin src="/assets/chat-DjxNXMx5.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/chat-Bx48hdJF.js">
+</head>
+<body class="min-h-screen bg-purple-50 flex flex-col">
+  <header class="bg-purple-600 text-white py-4 px-6 shadow-md flex justify-between items-center">
+    <h1 class="text-xl font-bold">Cryptic</h1>
+    <span>
+        <button type="reset" class="bg-gray-200 text-purple-500 p-2 rounded-lg hover:bg-gray-300" id="btm-leave">Leave</button>
+    </span>
+  </header>
+  <main class="flex-1 overflow-y-auto p-4 space-y-2" id="chat-area">
+    <div class="text-center text-gray-400 text-sm mt-4">Start chatting...</div>
+  </main>
+  <footer class="bg-white p-4 flex items-center gap-2 border-t border-gray-200">
+    <input id="msg-input" type="text" placeholder="Type your message..." 
+           class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400" />
+    <button id="send-btn" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition">
+      Send
+    </button>
+  </footer>
+</body>
+</html>
