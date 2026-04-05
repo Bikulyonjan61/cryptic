@@ -1,147 +1,109 @@
-# app.py — Flask + Socket.IO backend
-# Run with:  python app.py
-# Install:   pip install flask flask-socketio flask-cors
+from gevent import monkey
+monkey.patch_all()
 
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, join_room, emit
 from flask_cors import CORS
-import time
-import eventlet
-eventlet.monkey_patch()
+import os, time
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "change-this-in-production"
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-in-production")
 
-# ── CORS ──────────────────────────────────────────────────────────────
-# Allow requests from your Vite dev server.
-# Add your production domain here when you deploy, e.g. "https://cryptic.example.com"
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://192.168.1.65:5173",   # your LAN IP + Vite port
-    # "https://your-production-domain.com",  # add when deploying
-]
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "*")
 
-CORS(app, origins=ALLOWED_ORIGINS)
+CORS(app, origins=FRONTEND_URL)
+socketio = SocketIO(app, cors_allowed_origins=FRONTEND_URL, async_mode="gevent")
 
-socketio = SocketIO(
-    app,
-    cors_allowed_origins=ALLOWED_ORIGINS,  # must match frontend origin, NOT backend URL
-    async_mode="eventlet",
-)
-
-# In-memory room store  { room_code: { created_at, members: {sid: anon_name} } }
 rooms = {}
+ROOM_TTL = 3600
 
+def cleanup_empty_rooms():
+    now = time.time()
+    to_delete = [
+        code for code, data in rooms.items()
+        if len(data["members"]) == 0
+        and (now - data.get("last_active", data["created_at"])) > ROOM_TTL
+    ]
+    for code in to_delete:
+        del rooms[code]
 
-# ── REST Endpoints ────────────────────────────────────────────────────
+@app.route("/")
+def index():
+    return jsonify({"status": "Cryptic backend running"}), 200
 
 @app.route("/create-room", methods=["POST"])
 def create_room():
+    cleanup_empty_rooms()
     data = request.get_json(silent=True) or {}
     code = data.get("room_code", "").upper().strip()
 
     if not code:
         return jsonify({"error": "Room code cannot be empty."}), 400
-
-    # Basic sanitisation — letters and numbers only
     if not code.isalnum():
         return jsonify({"error": "Room code must contain only letters and numbers."}), 400
-
+    if len(code) < 2 or len(code) > 12:
+        return jsonify({"error": "Room code must be 2-12 characters."}), 400
     if code in rooms:
         return jsonify({"error": "Room code already exists. Choose a different code."}), 409
 
-    rooms[code] = {
-        "created_at": time.time(),
-        "members": {},          # sid → anon_name
-    }
-
+    rooms[code] = {"created_at": time.time(), "last_active": time.time(), "members": {}}
     print(f"[ROOM CREATED] {code}")
     return jsonify({"room_code": code}), 201
-
 
 @app.route("/validate-room/<code>", methods=["GET"])
 def validate_room(code):
     code = code.upper().strip()
-    exists = code in rooms
-    print(f"[VALIDATE] {code} → {exists}")
-    return jsonify({"valid": exists}), 200
-
-
-# ── Socket.IO Events ──────────────────────────────────────────────────
+    return jsonify({"valid": code in rooms}), 200
 
 @socketio.on("join")
 def on_join(data):
     code = data.get("room_code", "").upper().strip()
-
     if code not in rooms:
         emit("error", {"message": "Room not found."})
         return
+    if request.sid in rooms[code]["members"]:
+        return
 
-    # Assign an anonymous name based on join order
     member_number = len(rooms[code]["members"]) + 1
-    anon_name = f"AnonUser#{member_number}"
+    anon_name = f"Anon#{member_number}"
     rooms[code]["members"][request.sid] = anon_name
+    rooms[code]["last_active"] = time.time()
 
     join_room(code)
-
-    # Confirm to the joining client
-    emit("joined", {
-        "room_code": code,
-        "anon_name": anon_name,
-        "member_count": len(rooms[code]["members"]),
-    })
-
-    # Notify everyone else in the room
-    emit("user_joined", {
-        "anon_name": anon_name,
-        "member_count": len(rooms[code]["members"]),
-    }, to=code, include_self=False)
-
-    print(f"[JOIN] {anon_name} joined {code}  ({len(rooms[code]['members'])} online)")
-
+    emit("joined", {"room_code": code, "anon_name": anon_name, "member_count": len(rooms[code]["members"])})
+    emit("user_joined", {"anon_name": anon_name, "member_count": len(rooms[code]["members"])}, to=code, include_self=False)
+    print(f"[JOIN] {anon_name} joined {code} ({len(rooms[code]['members'])} online)")
 
 @socketio.on("message")
 def on_message(data):
-    """
-    Relay the encrypted message payload to everyone else in the room.
-    We never decrypt on the server — the ciphertext passes through opaquely.
-    """
-    code       = data.get("room_code", "").upper().strip()
+    code = data.get("room_code", "").upper().strip()
     ciphertext = data.get("ciphertext")
-    iv         = data.get("iv")
+    iv = data.get("iv")
 
-    if code not in rooms or request.sid not in rooms[code]["members"]:
+    if not code or code not in rooms:
+        emit("error", {"message": "Room not found."})
+        return
+    if request.sid not in rooms[code]["members"]:
         emit("error", {"message": "Not a member of this room."})
+        return
+    if not ciphertext or not iv:
+        emit("error", {"message": "Invalid message payload."})
         return
 
     sender_name = rooms[code]["members"][request.sid]
-
-    # Broadcast to everyone in the room EXCEPT the sender
-    emit("message", {
-        "from":       sender_name,
-        "ciphertext": ciphertext,
-        "iv":         iv,
-        "timestamp":  time.time(),
-    }, to=code, include_self=False)
-
+    rooms[code]["last_active"] = time.time()
+    emit("message", {"from": sender_name, "ciphertext": ciphertext, "iv": iv, "timestamp": time.time()}, to=code, include_self=False)
 
 @socketio.on("disconnect")
 def on_disconnect():
-    for code, room_data in rooms.items():
+    for code, room_data in list(rooms.items()):
         if request.sid in room_data["members"]:
             anon_name = room_data["members"].pop(request.sid)
-
-            emit("user_left", {
-                "anon_name":    anon_name,
-                "member_count": len(room_data["members"]),
-            }, to=code)
-
-            print(f"[LEAVE] {anon_name} left {code}  ({len(room_data['members'])} online)")
+            room_data["last_active"] = time.time()
+            emit("user_left", {"anon_name": anon_name, "member_count": len(room_data["members"])}, to=code)
+            print(f"[LEAVE] {anon_name} left {code} ({len(room_data['members'])} online)")
             break
 
-
-# ── Run ───────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
-    # host="0.0.0.0" makes the server reachable from other devices on your LAN
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port, debug=False)
